@@ -1,17 +1,12 @@
 # IncidentFlow
 
-Enterprise-style **IT Incident Management System** built as a portfolio-ready full-stack application.
+**IncidentFlow** is a full-stack IT incident management system.
 
-Employees report technical issues, technicians manage assignments, and administrators oversee operations, users, categories, and SLA compliance.
-
-> **Note:** This project was originally developed **locally**. It has now been published on GitHub under [Mallek8](https://github.com/Mallek8) so the work can be versioned, shared, and presented as a portfolio repository.
-
-> Status: **Phase 2 in progress / backend auth + persistence ready** — EF Core configurations, SQL Server migrations, Identity + JWT auth, and development seed data are implemented. Incident management APIs, React UI, Docker, and CI continue in later phases.
+Employees can report technical issues, technicians manage assigned incidents, and administrators oversee operations, users, categories, and SLA compliance.
 
 ## Repository
 
-- GitHub profile: [https://github.com/Mallek8](https://github.com/Mallek8)
-- This codebase is the IncidentFlow portfolio project (local → GitHub).
+- [https://github.com/Mallek8/IncidentFlow](https://github.com/Mallek8/IncidentFlow)
 
 ## Technology stack
 
@@ -80,7 +75,7 @@ Domain has **no** outward project dependencies.
 | `tech2@incidentflow.local` | `Tech123!` | Technician |
 | `employee@incidentflow.local` | `Employee123!` | Employee |
 
-These are **demo-only** accounts with fictional data — not real personal information.
+Development seed accounts use fictional data only.
 
 ## Prerequisites
 
@@ -144,9 +139,9 @@ Sensitive values must come from environment variables or user secrets — do not
 
 See `.env.example` for a template.
 
-## SLA calculation rules (demo)
+## SLA calculation rules
 
-Default resolution windows (calendar hours, 24/7 — **not** business-hours):
+Default resolution windows (calendar hours, 24/7 — not business-hours):
 
 | Priority | Hours |
 | --- | --- |
@@ -199,4 +194,4 @@ _Add UI screenshots after Phase 4–5._
 
 ## License
 
-This project is intended for portfolio / demonstration use unless otherwise specified.
+All rights reserved unless otherwise specified.

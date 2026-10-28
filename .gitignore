@@ -1,6 +1,10 @@
 ## .NET
 bin/
 obj/
+*.db
+*.db-shm
+*.db-wal
+src/IncidentFlow.API/incidentflow.dev.db*
 *.user
 *.suo
 *.userosscache

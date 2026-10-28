@@ -165,6 +165,88 @@ public class IdentityService : IIdentityService
         return MapProfile(user, roles);
     }
 
+    public async Task<IReadOnlyList<UserProfileDto>> GetUsersAsync(CancellationToken cancellationToken = default)
+    {
+        var users = await _userManager.Users
+            .OrderBy(u => u.LastName)
+            .ThenBy(u => u.FirstName)
+            .ToListAsync(cancellationToken);
+
+        var result = new List<UserProfileDto>();
+        foreach (var user in users)
+        {
+            var roles = await _userManager.GetRolesAsync(user);
+            result.Add(MapProfile(user, roles));
+        }
+
+        return result;
+    }
+
+    public async Task<UserProfileDto> UpdateUserRolesAsync(
+        string userId,
+        IReadOnlyList<string> roles,
+        CancellationToken cancellationToken = default)
+    {
+        var user = await _userManager.FindByIdAsync(userId)
+            ?? throw new NotFoundException("User", userId);
+
+        var distinctRoles = roles.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+        if (distinctRoles.Count == 0 || distinctRoles.Any(r => !Roles.All.Contains(r)))
+        {
+            throw new ValidationException($"Roles must be one or more of: {string.Join(", ", Roles.All)}.");
+        }
+
+        var currentRoles = await _userManager.GetRolesAsync(user);
+        var toRemove = currentRoles.Except(distinctRoles).ToList();
+        var toAdd = distinctRoles.Except(currentRoles).ToList();
+
+        if (toRemove.Count > 0)
+        {
+            var removeResult = await _userManager.RemoveFromRolesAsync(user, toRemove);
+            if (!removeResult.Succeeded)
+            {
+                throw new ValidationException(removeResult.Errors
+                    .GroupBy(e => e.Code)
+                    .ToDictionary(g => g.Key, g => g.Select(e => e.Description).ToArray()));
+            }
+        }
+
+        if (toAdd.Count > 0)
+        {
+            var addResult = await _userManager.AddToRolesAsync(user, toAdd);
+            if (!addResult.Succeeded)
+            {
+                throw new ValidationException(addResult.Errors
+                    .GroupBy(e => e.Code)
+                    .ToDictionary(g => g.Key, g => g.Select(e => e.Description).ToArray()));
+            }
+        }
+
+        var updatedRoles = await _userManager.GetRolesAsync(user);
+        return MapProfile(user, updatedRoles);
+    }
+
+    public async Task<UserProfileDto> SetUserActiveAsync(
+        string userId,
+        bool isActive,
+        CancellationToken cancellationToken = default)
+    {
+        var user = await _userManager.FindByIdAsync(userId)
+            ?? throw new NotFoundException("User", userId);
+
+        user.IsActive = isActive;
+        var result = await _userManager.UpdateAsync(user);
+        if (!result.Succeeded)
+        {
+            throw new ValidationException(result.Errors
+                .GroupBy(e => e.Code)
+                .ToDictionary(g => g.Key, g => g.Select(e => e.Description).ToArray()));
+        }
+
+        var roles = await _userManager.GetRolesAsync(user);
+        return MapProfile(user, roles);
+    }
+
     private async Task<AuthResultDto> IssueTokensAsync(ApplicationUser user, string? ipAddress, CancellationToken cancellationToken)
     {
         var roles = await _userManager.GetRolesAsync(user);

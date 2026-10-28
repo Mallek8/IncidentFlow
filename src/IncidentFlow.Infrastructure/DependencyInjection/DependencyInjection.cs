@@ -10,6 +10,7 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using Microsoft.IdentityModel.Tokens;
 
 namespace IncidentFlow.Infrastructure.DependencyInjection;
@@ -18,21 +19,37 @@ public static class DependencyInjection
 {
     public static IServiceCollection AddInfrastructure(
         this IServiceCollection services,
-        IConfiguration configuration)
+        IConfiguration configuration,
+        IHostEnvironment? environment = null)
     {
         var connectionString = configuration.GetConnectionString("DefaultConnection")
             ?? throw new InvalidOperationException(
                 "Connection string 'DefaultConnection' is missing. Configure it via appsettings, environment variables, or user secrets.");
+
+        var databaseProvider = configuration["Database:Provider"]
+            ?? (connectionString.Contains("Data Source=", StringComparison.OrdinalIgnoreCase)
+                || connectionString.Contains("Filename=", StringComparison.OrdinalIgnoreCase)
+                    ? "Sqlite"
+                    : "SqlServer");
 
         services.Configure<JwtOptions>(configuration.GetSection(JwtOptions.SectionName));
         var jwtOptions = configuration.GetSection(JwtOptions.SectionName).Get<JwtOptions>()
             ?? new JwtOptions();
 
         services.AddDbContext<ApplicationDbContext>(options =>
-            options.UseSqlServer(connectionString));
+        {
+            if (databaseProvider.Equals("Sqlite", StringComparison.OrdinalIgnoreCase))
+            {
+                options.UseSqlite(connectionString);
+            }
+            else
+            {
+                options.UseSqlServer(connectionString);
+            }
+        });
 
-        services.AddScoped<IApplicationDbContext>(provider =>
-            provider.GetRequiredService<ApplicationDbContext>());
+        services.AddScoped<IApplicationDbContext>(sp =>
+            sp.GetRequiredService<ApplicationDbContext>());
 
         services
             .AddIdentity<ApplicationUser, IdentityRole>(options =>
@@ -63,6 +80,8 @@ public static class DependencyInjection
             };
         });
 
+        var isDevelopment = environment?.IsDevelopment() ?? true;
+
         services
             .AddAuthentication(options =>
             {
@@ -71,7 +90,7 @@ public static class DependencyInjection
             })
             .AddJwtBearer(options =>
             {
-                options.RequireHttpsMetadata = true;
+                options.RequireHttpsMetadata = !isDevelopment;
                 options.SaveToken = true;
                 options.TokenValidationParameters = new TokenValidationParameters
                 {

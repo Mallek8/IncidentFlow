@@ -23,8 +23,6 @@ public class SlaPolicyConfiguration : IEntityTypeConfiguration<SlaPolicy>
             .HasConversion<string>()
             .HasMaxLength(20);
 
-        builder.HasIndex(x => x.Priority)
-            .IsUnique()
-            .HasFilter("[IsActive] = 1");
+        builder.HasIndex(x => new { x.Priority, x.IsActive });
     }
 }

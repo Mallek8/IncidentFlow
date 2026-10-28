@@ -1,4 +1,3 @@
-using IncidentFlow.Application.Common.Models;
 using IncidentFlow.Application.Features.Auth.Models;
 
 namespace IncidentFlow.Application.Common.Interfaces;
@@ -10,4 +9,7 @@ public interface IIdentityService
     Task<AuthResultDto> RefreshTokenAsync(string refreshToken, string? ipAddress, CancellationToken cancellationToken = default);
     Task RevokeRefreshTokenAsync(string refreshToken, string? ipAddress, CancellationToken cancellationToken = default);
     Task<UserProfileDto?> GetUserProfileAsync(string userId, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<UserProfileDto>> GetUsersAsync(CancellationToken cancellationToken = default);
+    Task<UserProfileDto> UpdateUserRolesAsync(string userId, IReadOnlyList<string> roles, CancellationToken cancellationToken = default);
+    Task<UserProfileDto> SetUserActiveAsync(string userId, bool isActive, CancellationToken cancellationToken = default);
 }

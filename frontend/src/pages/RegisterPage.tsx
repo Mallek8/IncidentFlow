@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react'
 import { Link, Navigate, useNavigate } from 'react-router-dom'
 import { useToast } from '../components/Toast'
+import { getErrorMessage } from '../lib/api'
 import { useAuth } from '../lib/auth'
 
 export function RegisterPage() {
@@ -25,7 +26,7 @@ export function RegisterPage() {
       toast.push('Account created', 'success')
       navigate('/')
     } catch (err) {
-      toast.push(err instanceof Error ? err.message : 'Registration failed', 'error')
+      toast.push(getErrorMessage(err), 'error')
     } finally {
       setLoading(false)
     }
@@ -35,7 +36,7 @@ export function RegisterPage() {
     <div className="mx-auto flex min-h-screen max-w-lg items-center px-4 py-10">
       <form onSubmit={onSubmit} className="w-full space-y-4 rounded-3xl border border-line bg-white p-8 shadow-xl">
         <h1 className="font-display text-3xl text-navy-900">Create account</h1>
-        <p className="text-sm text-muted">Employee self-registration</p>
+        <p className="text-sm text-muted">Employee self-registration · Created by Mallek Hannachi</p>
         {(['firstName', 'lastName', 'email', 'password'] as const).map((field) => (
           <label key={field} className="block space-y-1 text-sm capitalize">
             <span className="font-medium text-slate-700">{field.replace(/([A-Z])/g, ' $1')}</span>

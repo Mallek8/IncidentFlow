@@ -1,5 +1,4 @@
 using System.Text.Json.Serialization;
-using FluentValidation;
 using IncidentFlow.API.Middleware;
 using IncidentFlow.Application.DependencyInjection;
 using IncidentFlow.Infrastructure.DependencyInjection;
@@ -9,7 +8,7 @@ using Microsoft.OpenApi.Models;
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddApplication();
-builder.Services.AddInfrastructure(builder.Configuration);
+builder.Services.AddInfrastructure(builder.Configuration, builder.Environment);
 
 builder.Services.AddControllers()
     .AddJsonOptions(options =>
@@ -25,7 +24,7 @@ builder.Services.AddSwaggerGen(options =>
     {
         Title = "IncidentFlow API",
         Version = "v1",
-        Description = "IT Incident Management System API"
+        Description = "IT Incident Management System by Mallek Hannachi"
     });
 
     options.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
@@ -59,7 +58,7 @@ builder.Services.AddCors(options =>
     options.AddPolicy("Frontend", policy =>
     {
         var origins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>()
-            ?? ["http://localhost:5173"];
+            ?? ["http://localhost:5173", "http://127.0.0.1:5173"];
 
         policy.WithOrigins(origins)
             .AllowAnyHeader()
@@ -93,12 +92,18 @@ if (app.Environment.IsDevelopment())
     catch (Exception ex)
     {
         var logger = app.Services.GetRequiredService<ILoggerFactory>().CreateLogger("DbSeeder");
-        logger.LogWarning(ex,
-            "Database migrate/seed skipped or failed. Ensure SQL Server is running and ConnectionStrings:DefaultConnection is valid.");
+        logger.LogError(ex,
+            "Database migrate/seed failed. Check ConnectionStrings:DefaultConnection and Database:Provider.");
+        throw;
     }
 }
 
-app.UseHttpsRedirection();
+// Avoid HTTPS redirect breaking local HTTP (Vite proxy / axios Network Error).
+if (!app.Environment.IsDevelopment())
+{
+    app.UseHttpsRedirection();
+}
+
 app.UseCors("Frontend");
 app.UseAuthentication();
 app.UseAuthorization();

@@ -4,8 +4,8 @@ import { useParams } from 'react-router-dom'
 import { PriorityBadge, StatusBadge } from '../components/StatusBadge'
 import { useToast } from '../components/Toast'
 import { useAuth } from '../lib/auth'
-import { api, unwrap } from '../lib/api'
-import type { ApiResponse, IncidentDetail, IncidentStatus } from '../types/api'
+import { api, getErrorMessage, unwrap } from '../lib/api'
+import type { ApiResponse, IncidentDetail, IncidentStatus, UserProfile } from '../types/api'
 
 export function IncidentDetailPage() {
   const { id } = useParams()
@@ -16,6 +16,7 @@ export function IncidentDetailPage() {
   const [isInternal, setIsInternal] = useState(false)
   const [status, setStatus] = useState<IncidentStatus | ''>('')
   const [resolutionNotes, setResolutionNotes] = useState('')
+  const [technicianId, setTechnicianId] = useState('')
 
   const detail = useQuery({
     queryKey: ['incident', id],
@@ -41,7 +42,16 @@ export function IncidentDetailPage() {
       toast.push('Comment added', 'success')
       await refresh()
     },
-    onError: (err: Error) => toast.push(err.message, 'error'),
+    onError: (err) => toast.push(getErrorMessage(err), 'error'),
+  })
+
+  const technicians = useQuery({
+    queryKey: ['users'],
+    enabled: hasRole('Admin'),
+    queryFn: async () => {
+      const { data } = await api.get<ApiResponse<UserProfile[]>>('/api/users')
+      return unwrap(data).filter((u) => u.roles.includes('Technician') && u.isActive)
+    },
   })
 
   const updateStatus = useMutation({
@@ -56,7 +66,22 @@ export function IncidentDetailPage() {
       toast.push('Status updated', 'success')
       await refresh()
     },
-    onError: (err: Error) => toast.push(err.message, 'error'),
+    onError: (err) => toast.push(getErrorMessage(err), 'error'),
+  })
+
+  const assign = useMutation({
+    mutationFn: async () => {
+      const { data } = await api.post<ApiResponse<IncidentDetail>>(`/api/incidents/${id}/assign`, {
+        technicianUserId: technicianId,
+        notes: 'Assigned from IncidentFlow UI',
+      })
+      return unwrap(data)
+    },
+    onSuccess: async () => {
+      toast.push('Incident assigned', 'success')
+      await refresh()
+    },
+    onError: (err) => toast.push(getErrorMessage(err), 'error'),
   })
 
   const reopen = useMutation({
@@ -68,20 +93,21 @@ export function IncidentDetailPage() {
       toast.push('Incident reopened', 'success')
       await refresh()
     },
-    onError: (err: Error) => toast.push(err.message, 'error'),
+    onError: (err) => toast.push(getErrorMessage(err), 'error'),
   })
 
   if (detail.isLoading) return <div className="rounded-2xl border border-line bg-white p-8 text-muted">Loading…</div>
   if (detail.error || !detail.data) {
     return (
       <div className="rounded-2xl border border-rose-200 bg-rose-50 p-8 text-rose-800">
-        {detail.error instanceof Error ? detail.error.message : 'Incident not found'}
+        {detail.error ? getErrorMessage(detail.error) : 'Incident not found'}
       </div>
     )
   }
 
   const incident = detail.data
   const canManageStatus = hasRole('Admin', 'Technician')
+  const canAssign = hasRole('Admin')
   const canReopen = incident.allowedNextStatuses.includes('Reopened')
 
   const onComment = (e: FormEvent) => {
@@ -152,6 +178,34 @@ export function IncidentDetailPage() {
         </section>
 
         <section className="space-y-6">
+          {canAssign && (
+            <div className="rounded-2xl border border-line bg-white p-6 shadow-sm">
+              <h2 className="font-semibold text-navy-900">Assign technician</h2>
+              <div className="mt-4 space-y-3">
+                <select
+                  className="w-full rounded-xl border border-line px-3 py-2.5"
+                  value={technicianId}
+                  onChange={(e) => setTechnicianId(e.target.value)}
+                >
+                  <option value="">Select technician</option>
+                  {technicians.data?.map((tech) => (
+                    <option key={tech.id} value={tech.id}>
+                      {tech.fullName} ({tech.email})
+                    </option>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  disabled={!technicianId || assign.isPending}
+                  onClick={() => assign.mutate()}
+                  className="rounded-xl bg-navy-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
+                >
+                  Assign
+                </button>
+              </div>
+            </div>
+          )}
+
           {canManageStatus && (
             <div className="rounded-2xl border border-line bg-white p-6 shadow-sm">
               <h2 className="font-semibold text-navy-900">Update status</h2>

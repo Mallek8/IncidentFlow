@@ -25,12 +25,12 @@ export function AppLayout() {
 
   return (
     <div className="min-h-screen lg:grid lg:grid-cols-[260px_1fr]">
-      <aside className="bg-navy-950 text-white">
+      <aside className="flex flex-col bg-navy-950 text-white">
         <div className="border-b border-white/10 px-6 py-6">
           <div className="font-display text-2xl tracking-tight">IncidentFlow</div>
           <p className="mt-1 text-sm text-slate-400">IT service operations</p>
         </div>
-        <nav className="space-y-1 px-3 py-4">
+        <nav className="flex-1 space-y-1 px-3 py-4">
           <NavLink to="/" end className={linkClass}>
             <LayoutDashboard size={18} /> Dashboard
           </NavLink>
@@ -62,6 +62,10 @@ export function AppLayout() {
             <Settings size={18} /> Profile
           </NavLink>
         </nav>
+        <div className="border-t border-white/10 px-6 py-4 text-xs text-slate-400">
+          <p className="font-medium text-slate-300">Created by Mallek Hannachi</p>
+          <p className="mt-1">IncidentFlow © {new Date().getFullYear()}</p>
+        </div>
       </aside>
 
       <div className="flex min-h-screen flex-col">
@@ -93,6 +97,9 @@ export function AppLayout() {
         <main className="flex-1 px-4 py-6 sm:px-6 lg:px-8">
           <Outlet />
         </main>
+        <footer className="border-t border-line bg-white/70 px-6 py-3 text-center text-xs text-muted">
+          Created by <span className="font-medium text-navy-900">Mallek Hannachi</span>
+        </footer>
       </div>
     </div>
   )

@@ -21,7 +21,15 @@ public static class DbSeeder
         var userManager = provider.GetRequiredService<UserManager<ApplicationUser>>();
         var roleManager = provider.GetRequiredService<RoleManager<IdentityRole>>();
 
-        await db.Database.MigrateAsync();
+        if (db.Database.IsSqlite())
+        {
+            // Local development without SQL Server: create schema from the current model.
+            await db.Database.EnsureCreatedAsync();
+        }
+        else
+        {
+            await db.Database.MigrateAsync();
+        }
 
         foreach (var role in Roles.All)
         {

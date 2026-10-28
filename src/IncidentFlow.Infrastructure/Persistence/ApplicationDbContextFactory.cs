@@ -25,10 +25,19 @@ public class ApplicationDbContextFactory : IDesignTimeDbContextFactory<Applicati
             .Build();
 
         var connectionString = configuration.GetConnectionString("DefaultConnection")
-            ?? "Server=localhost,1433;Database=IncidentFlowDb;User Id=sa;Password=CHANGE_ME_LocalDev_Only!;TrustServerCertificate=True;MultipleActiveResultSets=true";
+            ?? "Data Source=incidentflow.dev.db";
+        var provider = configuration["Database:Provider"] ?? "Sqlite";
 
         var optionsBuilder = new DbContextOptionsBuilder<ApplicationDbContext>();
-        optionsBuilder.UseSqlServer(connectionString);
+        if (provider.Equals("Sqlite", StringComparison.OrdinalIgnoreCase)
+            || connectionString.Contains("Data Source=", StringComparison.OrdinalIgnoreCase))
+        {
+            optionsBuilder.UseSqlite(connectionString);
+        }
+        else
+        {
+            optionsBuilder.UseSqlServer(connectionString);
+        }
 
         return new ApplicationDbContext(optionsBuilder.Options);
     }

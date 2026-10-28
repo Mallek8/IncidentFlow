@@ -4,6 +4,8 @@
 
 Employees can report technical issues, technicians manage assigned incidents, and administrators oversee operations, users, categories, and SLA compliance.
 
+**Created by Mallek Hannachi**
+
 ## Repository
 
 - [https://github.com/Mallek8/IncidentFlow](https://github.com/Mallek8/IncidentFlow)
@@ -101,6 +103,10 @@ Development seed accounts use fictional data only.
 
 ## Run locally
 
+Development uses **SQLite** by default (`appsettings.Development.json`) so the API starts without installing SQL Server. Docker Compose still uses SQL Server.
+
+You must run **both** API and frontend (Network Error usually means the API is not running).
+
 ### Backend
 
 ```powershell
@@ -108,13 +114,12 @@ cd <repo-root>
 dotnet restore
 dotnet build
 dotnet test
-dotnet run --project src/IncidentFlow.API --launch-profile https
+dotnet run --project src/IncidentFlow.API --launch-profile http
+# or: .\scripts\start-api.ps1
 ```
 
-- Swagger: `https://localhost:7269/swagger`
+- Swagger: `http://localhost:5073/swagger`
 - HTTP API: `http://localhost:5073`
-
-Configure SQL Server and JWT via user secrets or environment variables (see `.env.example`).
 
 ### Frontend
 
@@ -122,10 +127,11 @@ Configure SQL Server and JWT via user secrets or environment variables (see `.en
 cd frontend
 npm install
 npm run dev
+# or from repo root: .\scripts\start-frontend.ps1
 ```
 
 - UI: `http://localhost:5173`
-- Set `VITE_API_BASE_URL=http://localhost:5073` if needed
+- Dev proxy: frontend `/api` → `http://localhost:5073` (leave `VITE_API_BASE_URL` empty)
 
 ### Docker Compose
 

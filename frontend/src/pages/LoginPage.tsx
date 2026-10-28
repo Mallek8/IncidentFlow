@@ -1,7 +1,8 @@
 import { useState, type FormEvent } from 'react'
 import { Link, Navigate, useNavigate } from 'react-router-dom'
-import { useAuth } from '../lib/auth'
 import { useToast } from '../components/Toast'
+import { getErrorMessage } from '../lib/api'
+import { useAuth } from '../lib/auth'
 
 export function LoginPage() {
   const { login, isAuthenticated } = useAuth()
@@ -21,7 +22,7 @@ export function LoginPage() {
       toast.push('Welcome back', 'success')
       navigate('/')
     } catch (err) {
-      toast.push(err instanceof Error ? err.message : 'Login failed', 'error')
+      toast.push(getErrorMessage(err), 'error')
     } finally {
       setLoading(false)
     }
@@ -35,6 +36,7 @@ export function LoginPage() {
           <p className="mt-4 max-w-md text-slate-200">
             Report, assign, and resolve IT incidents with role-based workflows and SLA tracking.
           </p>
+          <p className="mt-10 text-sm text-slate-300">Created by Mallek Hannachi</p>
         </div>
         <form onSubmit={onSubmit} className="space-y-4 p-8 sm:p-10">
           <h1 className="text-2xl font-semibold text-navy-900">Sign in</h1>

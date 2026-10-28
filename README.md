@@ -118,8 +118,8 @@ dotnet run --project src/IncidentFlow.API --launch-profile http
 # or: .\scripts\start-api.ps1
 ```
 
-- Swagger: `http://localhost:5073/swagger`
-- HTTP API: `http://localhost:5073`
+- Swagger: `http://localhost:5088/swagger`
+- HTTP API: `http://localhost:5088`
 
 ### Frontend
 
@@ -130,8 +130,8 @@ npm run dev
 # or from repo root: .\scripts\start-frontend.ps1
 ```
 
-- UI: `http://localhost:5173`
-- Dev proxy: frontend `/api` → `http://localhost:5073` (leave `VITE_API_BASE_URL` empty)
+- UI: `http://localhost:5188`
+- Dev proxy: frontend `/api` → `http://localhost:5088` (leave `VITE_API_BASE_URL` empty)
 
 ### Docker Compose
 

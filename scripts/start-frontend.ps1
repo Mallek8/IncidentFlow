@@ -6,5 +6,5 @@ if (-not (Test-Path "node_modules")) {
   npm install
 }
 
-Write-Host "Starting IncidentFlow frontend on http://localhost:5173 ..."
+Write-Host "Starting IncidentFlow frontend on http://localhost:5188 ..."
 npm run dev

@@ -1,7 +1,7 @@
 import axios, { AxiosError } from 'axios'
 import type { ApiResponse } from '../types/api'
 
-// Empty base URL uses the Vite dev-server proxy (/api -> http://localhost:5073),
+// Empty base URL uses the Vite dev-server proxy (/api -> http://localhost:5088),
 // which avoids CORS issues during local development.
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? ''
 
@@ -30,7 +30,7 @@ export function getErrorMessage(error: unknown): string {
   if (axios.isAxiosError(error)) {
     const axiosError = error as AxiosError<ApiResponse<unknown>>
     if (axiosError.code === 'ERR_NETWORK' || axiosError.message === 'Network Error') {
-      return 'Network Error: API unreachable. Start the backend with: dotnet run --project src/IncidentFlow.API --launch-profile http'
+      return 'Network Error: API unreachable. Start the backend with: dotnet run --project src/IncidentFlow.API --launch-profile http (http://localhost:5088)'
     }
     const payload = axiosError.response?.data
     if (payload?.message) return payload.message

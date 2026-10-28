@@ -25,7 +25,7 @@ services:
       ASPNETCORE_ENVIRONMENT: Development
       ConnectionStrings__DefaultConnection: "Server=sqlserver,1433;Database=IncidentFlowDb;User Id=sa;Password=${MSSQL_SA_PASSWORD:-Your_strong_Password123};TrustServerCertificate=True;MultipleActiveResultSets=true"
       Jwt__Key: "${JWT_KEY:-DEV_ONLY_IncidentFlow_Jwt_Signing_Key_Change_In_Production_32+}"
-      Cors__AllowedOrigins__0: "http://localhost:5173"
+      Cors__AllowedOrigins__0: "http://localhost:5188"
       Cors__AllowedOrigins__1: "http://localhost:8081"
     ports:
       - "8080:8080"

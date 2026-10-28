@@ -11,11 +11,11 @@ namespace IncidentFlow.API.Controllers;
 [Route("api/[controller]")]
 public class DashboardController : ControllerBase
 {
-    private readonly IIncidentService _incidents;
+    private readonly IDashboardService _dashboard;
 
-    public DashboardController(IIncidentService incidents)
+    public DashboardController(IDashboardService dashboard)
     {
-        _incidents = incidents;
+        _dashboard = dashboard;
     }
 
     [HttpGet("summary")]
@@ -23,7 +23,7 @@ public class DashboardController : ControllerBase
     public async Task<ActionResult<ApiResponse<DashboardSummaryDto>>> GetSummary(
         CancellationToken cancellationToken)
     {
-        var result = await _incidents.GetDashboardAsync(cancellationToken);
+        var result = await _dashboard.GetDashboardAsync(cancellationToken);
         return Ok(ApiResponse<DashboardSummaryDto>.Ok(result));
     }
 }

@@ -2,14 +2,14 @@ using IncidentFlow.Application.Features.Auth.Models;
 
 namespace IncidentFlow.Application.Common.Interfaces;
 
-public interface IIdentityService
+/// <summary>
+/// Authentication and token lifecycle only (SRP / ISP).
+/// </summary>
+public interface IAuthService
 {
     Task<AuthResultDto> RegisterAsync(RegisterRequest request, CancellationToken cancellationToken = default);
     Task<AuthResultDto> LoginAsync(LoginRequest request, string? ipAddress, CancellationToken cancellationToken = default);
     Task<AuthResultDto> RefreshTokenAsync(string refreshToken, string? ipAddress, CancellationToken cancellationToken = default);
     Task RevokeRefreshTokenAsync(string refreshToken, string? ipAddress, CancellationToken cancellationToken = default);
     Task<UserProfileDto?> GetUserProfileAsync(string userId, CancellationToken cancellationToken = default);
-    Task<IReadOnlyList<UserProfileDto>> GetUsersAsync(CancellationToken cancellationToken = default);
-    Task<UserProfileDto> UpdateUserRolesAsync(string userId, IReadOnlyList<string> roles, CancellationToken cancellationToken = default);
-    Task<UserProfileDto> SetUserActiveAsync(string userId, bool isActive, CancellationToken cancellationToken = default);
 }

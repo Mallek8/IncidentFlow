@@ -12,11 +12,11 @@ namespace IncidentFlow.API.Controllers;
 [Route("api/[controller]")]
 public class CategoriesController : ControllerBase
 {
-    private readonly IIncidentService _incidents;
+    private readonly ICategoryService _categories;
 
-    public CategoriesController(IIncidentService incidents)
+    public CategoriesController(ICategoryService categories)
     {
-        _incidents = incidents;
+        _categories = categories;
     }
 
     [HttpGet]
@@ -24,7 +24,7 @@ public class CategoriesController : ControllerBase
     public async Task<ActionResult<ApiResponse<IReadOnlyList<IncidentCategoryDto>>>> GetAll(
         CancellationToken cancellationToken)
     {
-        var result = await _incidents.GetCategoriesAsync(cancellationToken);
+        var result = await _categories.GetCategoriesAsync(cancellationToken);
         return Ok(ApiResponse<IReadOnlyList<IncidentCategoryDto>>.Ok(result));
     }
 
@@ -40,7 +40,7 @@ public class CategoriesController : ControllerBase
             return BadRequest(ApiResponse<IncidentCategoryDto>.Fail("Category name is required."));
         }
 
-        var result = await _incidents.CreateCategoryAsync(request, cancellationToken);
+        var result = await _categories.CreateCategoryAsync(request, cancellationToken);
         return CreatedAtAction(nameof(GetAll), ApiResponse<IncidentCategoryDto>.Ok(result, "Category created."));
     }
 }

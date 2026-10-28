@@ -1,8 +1,9 @@
 using IncidentFlow.Application.Common.Exceptions;
 using IncidentFlow.Application.Common.Interfaces;
 using IncidentFlow.Application.Common.Models;
+using IncidentFlow.Application.Features.Incidents.Mapping;
 using IncidentFlow.Application.Features.Incidents.Models;
-using IncidentFlow.Domain.Constants;
+using IncidentFlow.Application.Features.Incidents.Security;
 using IncidentFlow.Domain.Entities;
 using IncidentFlow.Domain.Enums;
 using IncidentFlow.Domain.Services;
@@ -10,25 +11,37 @@ using Microsoft.EntityFrameworkCore;
 
 namespace IncidentFlow.Application.Features.Incidents.Services;
 
+/// <summary>
+/// Orchestrates incident lifecycle. Authorization, mapping, and ticket numbering are delegated.
+/// </summary>
 public class IncidentService : IIncidentService
 {
     private readonly IApplicationDbContext _db;
     private readonly ICurrentUserService _currentUser;
     private readonly IDateTimeProvider _clock;
+    private readonly IIncidentAccessPolicy _accessPolicy;
+    private readonly IIncidentMapper _mapper;
+    private readonly ITicketNumberGenerator _ticketNumbers;
 
     public IncidentService(
         IApplicationDbContext db,
         ICurrentUserService currentUser,
-        IDateTimeProvider clock)
+        IDateTimeProvider clock,
+        IIncidentAccessPolicy accessPolicy,
+        IIncidentMapper mapper,
+        ITicketNumberGenerator ticketNumbers)
     {
         _db = db;
         _currentUser = currentUser;
         _clock = clock;
+        _accessPolicy = accessPolicy;
+        _mapper = mapper;
+        _ticketNumbers = ticketNumbers;
     }
 
     public async Task<IncidentDetailDto> CreateAsync(CreateIncidentRequest request, CancellationToken cancellationToken = default)
     {
-        EnsureAuthenticated();
+        _accessPolicy.EnsureAuthenticated();
 
         var category = await _db.IncidentCategories
             .FirstOrDefaultAsync(c => c.Id == request.CategoryId && c.IsActive, cancellationToken)
@@ -42,7 +55,7 @@ public class IncidentService : IIncidentService
         var createdAt = _clock.UtcNow;
         var incident = new Incident
         {
-            TicketNumber = await GenerateTicketNumberAsync(cancellationToken),
+            TicketNumber = await _ticketNumbers.GenerateAsync(cancellationToken),
             Title = request.Title.Trim(),
             Description = request.Description.Trim(),
             CategoryId = category.Id,
@@ -70,7 +83,7 @@ public class IncidentService : IIncidentService
 
     public async Task<PagedResult<IncidentListItemDto>> GetPagedAsync(IncidentQuery query, CancellationToken cancellationToken = default)
     {
-        EnsureAuthenticated();
+        _accessPolicy.EnsureAuthenticated();
         var now = _clock.UtcNow;
 
         var incidents = _db.Incidents
@@ -78,7 +91,7 @@ public class IncidentService : IIncidentService
             .Include(i => i.Category)
             .AsQueryable();
 
-        incidents = ApplyVisibilityFilter(incidents);
+        incidents = _accessPolicy.ApplyVisibilityFilter(incidents);
 
         if (query.CreatedByMe)
         {
@@ -138,24 +151,9 @@ public class IncidentService : IIncidentService
             .Take(query.PageSize)
             .ToListAsync(cancellationToken);
 
-        var items = pageItems.Select(i => new IncidentListItemDto(
-                i.Id,
-                i.TicketNumber,
-                i.Title,
-                i.Category.Name,
-                i.Priority,
-                i.Status,
-                i.CreatedByUserId,
-                i.AssignedTechnicianId,
-                i.CreatedAtUtc,
-                i.UpdatedAtUtc,
-                i.SlaDeadlineUtc,
-                SlaCalculator.IsOverdue(i.SlaDeadlineUtc, i.ResolutionDateUtc, now)))
-            .ToList();
-
         return new PagedResult<IncidentListItemDto>
         {
-            Items = items,
+            Items = pageItems.Select(i => _mapper.ToListItem(i, now)).ToList(),
             Page = page,
             PageSize = query.PageSize,
             TotalCount = total
@@ -164,7 +162,7 @@ public class IncidentService : IIncidentService
 
     public async Task<IncidentDetailDto> GetByIdAsync(Guid id, CancellationToken cancellationToken = default)
     {
-        EnsureAuthenticated();
+        _accessPolicy.EnsureAuthenticated();
 
         var incident = await _db.Incidents
             .AsNoTracking()
@@ -174,28 +172,19 @@ public class IncidentService : IIncidentService
             .FirstOrDefaultAsync(i => i.Id == id, cancellationToken)
             ?? throw new NotFoundException(nameof(Incident), id);
 
-        EnsureCanView(incident);
-        return MapDetail(incident);
+        _accessPolicy.EnsureCanView(incident);
+        return _mapper.ToDetail(incident, _clock.UtcNow, _accessPolicy.IsStaff());
     }
 
-    public async Task<IncidentDetailDto> UpdateStatusAsync(Guid id, UpdateIncidentStatusRequest request, CancellationToken cancellationToken = default)
+    public async Task<IncidentDetailDto> UpdateStatusAsync(
+        Guid id,
+        UpdateIncidentStatusRequest request,
+        CancellationToken cancellationToken = default)
     {
-        EnsureAuthenticated();
-        EnsureStaff();
+        _accessPolicy.EnsureAuthenticated();
 
-        var incident = await _db.Incidents
-            .Include(i => i.Category)
-            .Include(i => i.Comments)
-            .Include(i => i.History)
-            .FirstOrDefaultAsync(i => i.Id == id, cancellationToken)
-            ?? throw new NotFoundException(nameof(Incident), id);
-
-        if (_currentUser.IsInRole(Roles.Technician) &&
-            !_currentUser.IsInRole(Roles.Admin) &&
-            incident.AssignedTechnicianId != _currentUser.UserId)
-        {
-            throw new ForbiddenAccessException("Technicians can only update incidents assigned to them.");
-        }
+        var incident = await LoadTrackedIncidentAsync(id, includeAssignments: false, cancellationToken);
+        _accessPolicy.EnsureCanUpdateStatus(incident);
 
         if (!IncidentStatusTransitionRules.CanTransition(incident.Status, request.Status))
         {
@@ -213,12 +202,10 @@ public class IncidentService : IIncidentService
             incident.ResolutionNotes = request.ResolutionNotes?.Trim();
         }
 
-        if (request.Status is IncidentStatus.Reopened or IncidentStatus.InProgress or IncidentStatus.Assigned)
+        if ((request.Status is IncidentStatus.Reopened or IncidentStatus.InProgress or IncidentStatus.Assigned)
+            && (oldStatus is IncidentStatus.Resolved or IncidentStatus.Closed))
         {
-            if (oldStatus is IncidentStatus.Resolved or IncidentStatus.Closed)
-            {
-                incident.ResolutionDateUtc = null;
-            }
+            incident.ResolutionDateUtc = null;
         }
 
         incident.History.Add(new IncidentHistory
@@ -232,24 +219,17 @@ public class IncidentService : IIncidentService
         });
 
         await _db.SaveChangesAsync(cancellationToken);
-        return MapDetail(incident);
+        return _mapper.ToDetail(incident, _clock.UtcNow, includeInternalNotes: true);
     }
 
-    public async Task<IncidentDetailDto> AssignAsync(Guid id, AssignIncidentRequest request, CancellationToken cancellationToken = default)
+    public async Task<IncidentDetailDto> AssignAsync(
+        Guid id,
+        AssignIncidentRequest request,
+        CancellationToken cancellationToken = default)
     {
-        EnsureAuthenticated();
-        if (!_currentUser.IsInRole(Roles.Admin))
-        {
-            throw new ForbiddenAccessException("Only administrators can assign incidents.");
-        }
+        _accessPolicy.EnsureCanAssign();
 
-        var incident = await _db.Incidents
-            .Include(i => i.Category)
-            .Include(i => i.Comments)
-            .Include(i => i.History)
-            .Include(i => i.Assignments)
-            .FirstOrDefaultAsync(i => i.Id == id, cancellationToken)
-            ?? throw new NotFoundException(nameof(Incident), id);
+        var incident = await LoadTrackedIncidentAsync(id, includeAssignments: true, cancellationToken);
 
         foreach (var active in incident.Assignments.Where(a => a.IsActive))
         {
@@ -260,7 +240,7 @@ public class IncidentService : IIncidentService
         incident.AssignedTechnicianId = request.TechnicianUserId;
         incident.UpdatedAtUtc = _clock.UtcNow;
 
-        if (incident.Status == IncidentStatus.New || incident.Status == IncidentStatus.Reopened)
+        if (incident.Status is IncidentStatus.New or IncidentStatus.Reopened)
         {
             var old = incident.Status;
             incident.Status = IncidentStatus.Assigned;
@@ -295,20 +275,23 @@ public class IncidentService : IIncidentService
         });
 
         await _db.SaveChangesAsync(cancellationToken);
-        return MapDetail(incident);
+        return _mapper.ToDetail(incident, _clock.UtcNow, includeInternalNotes: true);
     }
 
-    public async Task<IncidentCommentDto> AddCommentAsync(Guid id, AddCommentRequest request, CancellationToken cancellationToken = default)
+    public async Task<IncidentCommentDto> AddCommentAsync(
+        Guid id,
+        AddCommentRequest request,
+        CancellationToken cancellationToken = default)
     {
-        EnsureAuthenticated();
+        _accessPolicy.EnsureAuthenticated();
 
         var incident = await _db.Incidents
             .FirstOrDefaultAsync(i => i.Id == id, cancellationToken)
             ?? throw new NotFoundException(nameof(Incident), id);
 
-        EnsureCanView(incident);
+        _accessPolicy.EnsureCanView(incident);
 
-        if (request.IsInternal && !IsStaff())
+        if (request.IsInternal && !_accessPolicy.IsStaff())
         {
             throw new ForbiddenAccessException("Only technicians and admins can add internal notes.");
         }
@@ -326,30 +309,13 @@ public class IncidentService : IIncidentService
         incident.UpdatedAtUtc = _clock.UtcNow;
         await _db.SaveChangesAsync(cancellationToken);
 
-        return new IncidentCommentDto(
-            comment.Id,
-            comment.AuthorUserId,
-            comment.Content,
-            comment.IsInternal,
-            comment.CreatedAtUtc);
+        return _mapper.ToComment(comment);
     }
 
     public async Task<IncidentDetailDto> ReopenAsync(Guid id, CancellationToken cancellationToken = default)
     {
-        EnsureAuthenticated();
-
-        var incident = await _db.Incidents
-            .Include(i => i.Category)
-            .Include(i => i.Comments)
-            .Include(i => i.History)
-            .FirstOrDefaultAsync(i => i.Id == id, cancellationToken)
-            ?? throw new NotFoundException(nameof(Incident), id);
-
-        var isOwner = incident.CreatedByUserId == _currentUser.UserId;
-        if (!isOwner && !_currentUser.IsInRole(Roles.Admin))
-        {
-            throw new ForbiddenAccessException("Only the reporter or an admin can reopen an incident.");
-        }
+        var incident = await LoadTrackedIncidentAsync(id, includeAssignments: false, cancellationToken);
+        _accessPolicy.EnsureCanReopen(incident);
 
         if (!IncidentStatusTransitionRules.CanTransition(incident.Status, IncidentStatus.Reopened))
         {
@@ -371,211 +337,26 @@ public class IncidentService : IIncidentService
         });
 
         await _db.SaveChangesAsync(cancellationToken);
-        return MapDetail(incident);
+        return _mapper.ToDetail(incident, _clock.UtcNow, _accessPolicy.IsStaff());
     }
 
-    public async Task<IReadOnlyList<IncidentCategoryDto>> GetCategoriesAsync(CancellationToken cancellationToken = default)
+    private async Task<Incident> LoadTrackedIncidentAsync(
+        Guid id,
+        bool includeAssignments,
+        CancellationToken cancellationToken)
     {
-        return await _db.IncidentCategories
-            .AsNoTracking()
-            .Where(c => c.IsActive)
-            .OrderBy(c => c.Name)
-            .Select(c => new IncidentCategoryDto(c.Id, c.Name, c.Description, c.IsActive))
-            .ToListAsync(cancellationToken);
-    }
-
-    public async Task<IncidentCategoryDto> CreateCategoryAsync(CreateCategoryRequest request, CancellationToken cancellationToken = default)
-    {
-        EnsureAuthenticated();
-        if (!_currentUser.IsInRole(Roles.Admin))
-        {
-            throw new ForbiddenAccessException("Only administrators can manage categories.");
-        }
-
-        var name = request.Name.Trim();
-        var exists = await _db.IncidentCategories.AnyAsync(c => c.Name == name, cancellationToken);
-        if (exists)
-        {
-            throw new BusinessRuleException($"Category '{name}' already exists.");
-        }
-
-        var category = new IncidentCategory
-        {
-            Name = name,
-            Description = request.Description?.Trim(),
-            IsActive = true
-        };
-
-        _db.IncidentCategories.Add(category);
-        await _db.SaveChangesAsync(cancellationToken);
-
-        return new IncidentCategoryDto(category.Id, category.Name, category.Description, category.IsActive);
-    }
-
-    public async Task<DashboardSummaryDto> GetDashboardAsync(CancellationToken cancellationToken = default)
-    {
-        EnsureAuthenticated();
-        var now = _clock.UtcNow;
-
-        var query = ApplyVisibilityFilter(_db.Incidents.AsNoTracking());
-
-        var incidents = await query
+        var query = _db.Incidents
             .Include(i => i.Category)
-            .ToListAsync(cancellationToken);
+            .Include(i => i.Comments)
+            .Include(i => i.History)
+            .AsQueryable();
 
-        var openStatuses = new[]
+        if (includeAssignments)
         {
-            IncidentStatus.New,
-            IncidentStatus.Assigned,
-            IncidentStatus.InProgress,
-            IncidentStatus.Reopened
-        };
-
-        var resolved = incidents.Where(i => i.Status is IncidentStatus.Resolved or IncidentStatus.Closed).ToList();
-        var resolvedWithDuration = resolved
-            .Where(i => i.ResolutionDateUtc.HasValue)
-            .Select(i => SlaCalculator.CalculateResolutionHours(i.CreatedAtUtc, i.ResolutionDateUtc)!.Value)
-            .ToList();
-
-        var slaCompliant = resolved.Count(i =>
-            i.ResolutionDateUtc.HasValue && i.ResolutionDateUtc.Value <= i.SlaDeadlineUtc);
-
-        var byCategory = incidents
-            .GroupBy(i => i.Category.Name)
-            .Select(g => new NamedCountDto(g.Key, g.Count()))
-            .OrderByDescending(x => x.Count)
-            .ToList();
-
-        var byPriority = incidents
-            .GroupBy(i => i.Priority.ToString())
-            .Select(g => new NamedCountDto(g.Key, g.Count()))
-            .ToList();
-
-        var monthly = incidents
-            .GroupBy(i => new { i.CreatedAtUtc.Year, i.CreatedAtUtc.Month })
-            .OrderBy(g => g.Key.Year).ThenBy(g => g.Key.Month)
-            .TakeLast(6)
-            .Select(g => new MonthlyTrendDto($"{g.Key.Year}-{g.Key.Month:D2}", g.Count()))
-            .ToList();
-
-        return new DashboardSummaryDto(
-            incidents.Count,
-            incidents.Count(i => openStatuses.Contains(i.Status)),
-            incidents.Count(i => i.Priority == IncidentPriority.Critical && openStatuses.Contains(i.Status)),
-            resolved.Count,
-            resolvedWithDuration.Count == 0 ? null : resolvedWithDuration.Average(),
-            resolved.Count == 0 ? 100 : Math.Round(slaCompliant * 100.0 / resolved.Count, 1),
-            byCategory,
-            byPriority,
-            monthly);
-    }
-
-    private IQueryable<Incident> ApplyVisibilityFilter(IQueryable<Incident> query)
-    {
-        if (_currentUser.IsInRole(Roles.Admin))
-        {
-            return query;
+            query = query.Include(i => i.Assignments);
         }
 
-        if (_currentUser.IsInRole(Roles.Technician))
-        {
-            return query.Where(i =>
-                i.AssignedTechnicianId == _currentUser.UserId ||
-                i.CreatedByUserId == _currentUser.UserId ||
-                i.Status == IncidentStatus.New);
-        }
-
-        return query.Where(i => i.CreatedByUserId == _currentUser.UserId);
+        return await query.FirstOrDefaultAsync(i => i.Id == id, cancellationToken)
+            ?? throw new NotFoundException(nameof(Incident), id);
     }
-
-    private void EnsureCanView(Incident incident)
-    {
-        if (_currentUser.IsInRole(Roles.Admin))
-        {
-            return;
-        }
-
-        if (_currentUser.IsInRole(Roles.Technician))
-        {
-            if (incident.AssignedTechnicianId == _currentUser.UserId ||
-                incident.CreatedByUserId == _currentUser.UserId ||
-                incident.Status == IncidentStatus.New)
-            {
-                return;
-            }
-        }
-
-        if (incident.CreatedByUserId == _currentUser.UserId)
-        {
-            return;
-        }
-
-        throw new ForbiddenAccessException("You are not allowed to view this incident.");
-    }
-
-    private IncidentDetailDto MapDetail(Incident incident)
-    {
-        var now = _clock.UtcNow;
-        var showInternal = IsStaff();
-
-        var comments = incident.Comments
-            .Where(c => showInternal || !c.IsInternal)
-            .OrderBy(c => c.CreatedAtUtc)
-            .Select(c => new IncidentCommentDto(
-                c.Id, c.AuthorUserId, c.Content, c.IsInternal, c.CreatedAtUtc))
-            .ToList();
-
-        var history = incident.History
-            .OrderBy(h => h.ChangedAtUtc)
-            .Select(h => new IncidentHistoryDto(
-                h.Id, h.ChangedByUserId, h.ChangeType, h.FieldName, h.OldValue, h.NewValue,
-                h.OldStatus, h.NewStatus, h.ChangedAtUtc, h.Notes))
-            .ToList();
-
-        return new IncidentDetailDto(
-            incident.Id,
-            incident.TicketNumber,
-            incident.Title,
-            incident.Description,
-            incident.CategoryId,
-            incident.Category?.Name ?? string.Empty,
-            incident.Priority,
-            incident.Status,
-            incident.CreatedByUserId,
-            incident.AssignedTechnicianId,
-            incident.CreatedAtUtc,
-            incident.UpdatedAtUtc,
-            incident.ResolutionDateUtc,
-            incident.SlaDeadlineUtc,
-            incident.ResolutionNotes,
-            SlaCalculator.IsOverdue(incident.SlaDeadlineUtc, incident.ResolutionDateUtc, now),
-            IncidentStatusTransitionRules.GetAllowedTargets(incident.Status).ToList(),
-            comments,
-            history);
-    }
-
-    private async Task<string> GenerateTicketNumberAsync(CancellationToken cancellationToken)
-    {
-        var count = await _db.Incidents.CountAsync(cancellationToken);
-        return $"INC-{100001 + count}";
-    }
-
-    private void EnsureAuthenticated()
-    {
-        if (!_currentUser.IsAuthenticated || string.IsNullOrWhiteSpace(_currentUser.UserId))
-        {
-            throw new UnauthorizedAccessException("Authentication required.");
-        }
-    }
-
-    private void EnsureStaff()
-    {
-        if (!IsStaff())
-        {
-            throw new ForbiddenAccessException("Only technicians and admins can perform this action.");
-        }
-    }
-
-    private bool IsStaff() =>
-        _currentUser.IsInRole(Roles.Admin) || _currentUser.IsInRole(Roles.Technician);
 }

@@ -12,11 +12,11 @@ namespace IncidentFlow.API.Controllers;
 [Route("api/[controller]")]
 public class UsersController : ControllerBase
 {
-    private readonly IIdentityService _identityService;
+    private readonly IUserAdminService _userAdminService;
 
-    public UsersController(IIdentityService identityService)
+    public UsersController(IUserAdminService userAdminService)
     {
-        _identityService = identityService;
+        _userAdminService = userAdminService;
     }
 
     [HttpGet]
@@ -24,7 +24,7 @@ public class UsersController : ControllerBase
     public async Task<ActionResult<ApiResponse<IReadOnlyList<UserProfileDto>>>> GetUsers(
         CancellationToken cancellationToken)
     {
-        var users = await _identityService.GetUsersAsync(cancellationToken);
+        var users = await _userAdminService.GetUsersAsync(cancellationToken);
         return Ok(ApiResponse<IReadOnlyList<UserProfileDto>>.Ok(users));
     }
 
@@ -35,7 +35,7 @@ public class UsersController : ControllerBase
         [FromBody] UpdateUserRolesRequest request,
         CancellationToken cancellationToken)
     {
-        var user = await _identityService.UpdateUserRolesAsync(id, request.Roles, cancellationToken);
+        var user = await _userAdminService.UpdateUserRolesAsync(id, request.Roles, cancellationToken);
         return Ok(ApiResponse<UserProfileDto>.Ok(user, "Roles updated."));
     }
 
@@ -46,7 +46,7 @@ public class UsersController : ControllerBase
         [FromBody] SetUserActiveRequest request,
         CancellationToken cancellationToken)
     {
-        var user = await _identityService.SetUserActiveAsync(id, request.IsActive, cancellationToken);
+        var user = await _userAdminService.SetUserActiveAsync(id, request.IsActive, cancellationToken);
         return Ok(ApiResponse<UserProfileDto>.Ok(user, "User status updated."));
     }
 }

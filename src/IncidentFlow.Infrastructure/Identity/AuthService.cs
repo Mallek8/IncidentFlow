@@ -10,7 +10,10 @@ using Microsoft.Extensions.Options;
 
 namespace IncidentFlow.Infrastructure.Identity;
 
-public class IdentityService : IIdentityService
+/// <summary>
+/// Authentication and token issuance only (SRP).
+/// </summary>
+public class AuthService : IAuthService
 {
     private readonly UserManager<ApplicationUser> _userManager;
     private readonly SignInManager<ApplicationUser> _signInManager;
@@ -19,7 +22,7 @@ public class IdentityService : IIdentityService
     private readonly ITokenService _tokenService;
     private readonly JwtOptions _jwtOptions;
 
-    public IdentityService(
+    public AuthService(
         UserManager<ApplicationUser> userManager,
         SignInManager<ApplicationUser> signInManager,
         RoleManager<IdentityRole> roleManager,
@@ -49,7 +52,6 @@ public class IdentityService : IIdentityService
             throw new ValidationException($"Invalid role '{role}'.");
         }
 
-        // Public self-registration is limited to Employee. Admin/Technician are seeded or created by Admin.
         if (role is not Roles.Employee)
         {
             throw new ForbiddenAccessException("Self-registration is only allowed for the Employee role.");
@@ -118,25 +120,20 @@ public class IdentityService : IIdentityService
         var newRefresh = _tokenService.CreateRefreshToken();
         stored.ReplacedByToken = newRefresh;
 
-        var replacement = new RefreshToken
+        _dbContext.RefreshTokens.Add(new RefreshToken
         {
             UserId = stored.UserId,
             Token = newRefresh,
             ExpiresAtUtc = DateTime.UtcNow.AddDays(_jwtOptions.RefreshTokenExpirationDays),
             CreatedByIp = ipAddress
-        };
+        });
 
-        _dbContext.RefreshTokens.Add(replacement);
         await _dbContext.SaveChangesAsync(cancellationToken);
 
         var roles = await _userManager.GetRolesAsync(stored.User);
         var (accessToken, expires) = _tokenService.CreateAccessToken(stored.User, roles);
 
-        return new AuthResultDto(
-            accessToken,
-            newRefresh,
-            expires,
-            MapProfile(stored.User, roles));
+        return new AuthResultDto(accessToken, newRefresh, expires, UserProfileMapper.ToDto(stored.User, roles));
     }
 
     public async Task RevokeRefreshTokenAsync(string refreshToken, string? ipAddress, CancellationToken cancellationToken = default)
@@ -162,89 +159,7 @@ public class IdentityService : IIdentityService
         }
 
         var roles = await _userManager.GetRolesAsync(user);
-        return MapProfile(user, roles);
-    }
-
-    public async Task<IReadOnlyList<UserProfileDto>> GetUsersAsync(CancellationToken cancellationToken = default)
-    {
-        var users = await _userManager.Users
-            .OrderBy(u => u.LastName)
-            .ThenBy(u => u.FirstName)
-            .ToListAsync(cancellationToken);
-
-        var result = new List<UserProfileDto>();
-        foreach (var user in users)
-        {
-            var roles = await _userManager.GetRolesAsync(user);
-            result.Add(MapProfile(user, roles));
-        }
-
-        return result;
-    }
-
-    public async Task<UserProfileDto> UpdateUserRolesAsync(
-        string userId,
-        IReadOnlyList<string> roles,
-        CancellationToken cancellationToken = default)
-    {
-        var user = await _userManager.FindByIdAsync(userId)
-            ?? throw new NotFoundException("User", userId);
-
-        var distinctRoles = roles.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
-        if (distinctRoles.Count == 0 || distinctRoles.Any(r => !Roles.All.Contains(r)))
-        {
-            throw new ValidationException($"Roles must be one or more of: {string.Join(", ", Roles.All)}.");
-        }
-
-        var currentRoles = await _userManager.GetRolesAsync(user);
-        var toRemove = currentRoles.Except(distinctRoles).ToList();
-        var toAdd = distinctRoles.Except(currentRoles).ToList();
-
-        if (toRemove.Count > 0)
-        {
-            var removeResult = await _userManager.RemoveFromRolesAsync(user, toRemove);
-            if (!removeResult.Succeeded)
-            {
-                throw new ValidationException(removeResult.Errors
-                    .GroupBy(e => e.Code)
-                    .ToDictionary(g => g.Key, g => g.Select(e => e.Description).ToArray()));
-            }
-        }
-
-        if (toAdd.Count > 0)
-        {
-            var addResult = await _userManager.AddToRolesAsync(user, toAdd);
-            if (!addResult.Succeeded)
-            {
-                throw new ValidationException(addResult.Errors
-                    .GroupBy(e => e.Code)
-                    .ToDictionary(g => g.Key, g => g.Select(e => e.Description).ToArray()));
-            }
-        }
-
-        var updatedRoles = await _userManager.GetRolesAsync(user);
-        return MapProfile(user, updatedRoles);
-    }
-
-    public async Task<UserProfileDto> SetUserActiveAsync(
-        string userId,
-        bool isActive,
-        CancellationToken cancellationToken = default)
-    {
-        var user = await _userManager.FindByIdAsync(userId)
-            ?? throw new NotFoundException("User", userId);
-
-        user.IsActive = isActive;
-        var result = await _userManager.UpdateAsync(user);
-        if (!result.Succeeded)
-        {
-            throw new ValidationException(result.Errors
-                .GroupBy(e => e.Code)
-                .ToDictionary(g => g.Key, g => g.Select(e => e.Description).ToArray()));
-        }
-
-        var roles = await _userManager.GetRolesAsync(user);
-        return MapProfile(user, roles);
+        return UserProfileMapper.ToDto(user, roles);
     }
 
     private async Task<AuthResultDto> IssueTokensAsync(ApplicationUser user, string? ipAddress, CancellationToken cancellationToken)
@@ -263,20 +178,6 @@ public class IdentityService : IIdentityService
 
         await _dbContext.SaveChangesAsync(cancellationToken);
 
-        return new AuthResultDto(
-            accessToken,
-            refreshTokenValue,
-            expires,
-            MapProfile(user, roles));
+        return new AuthResultDto(accessToken, refreshTokenValue, expires, UserProfileMapper.ToDto(user, roles));
     }
-
-    private static UserProfileDto MapProfile(ApplicationUser user, IList<string> roles) =>
-        new(
-            user.Id,
-            user.Email ?? string.Empty,
-            user.FirstName,
-            user.LastName,
-            user.FullName,
-            roles.ToList(),
-            user.IsActive);
 }

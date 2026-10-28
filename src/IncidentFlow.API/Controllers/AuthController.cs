@@ -11,18 +11,18 @@ namespace IncidentFlow.API.Controllers;
 [Route("api/[controller]")]
 public class AuthController : ControllerBase
 {
-    private readonly IIdentityService _identityService;
+    private readonly IAuthService _authService;
     private readonly ICurrentUserService _currentUser;
     private readonly IValidator<RegisterRequest> _registerValidator;
     private readonly IValidator<LoginRequest> _loginValidator;
 
     public AuthController(
-        IIdentityService identityService,
+        IAuthService authService,
         ICurrentUserService currentUser,
         IValidator<RegisterRequest> registerValidator,
         IValidator<LoginRequest> loginValidator)
     {
-        _identityService = identityService;
+        _authService = authService;
         _currentUser = currentUser;
         _registerValidator = registerValidator;
         _loginValidator = loginValidator;
@@ -31,33 +31,30 @@ public class AuthController : ControllerBase
     [HttpPost("register")]
     [AllowAnonymous]
     [ProducesResponseType(typeof(ApiResponse<AuthResultDto>), StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<ApiResponse<AuthResultDto>>> Register(
         [FromBody] RegisterRequest request,
         CancellationToken cancellationToken)
     {
         await _registerValidator.ValidateAndThrowAsync(request, cancellationToken);
-        var result = await _identityService.RegisterAsync(request, cancellationToken);
+        var result = await _authService.RegisterAsync(request, cancellationToken);
         return Ok(ApiResponse<AuthResultDto>.Ok(result, "Registration successful."));
     }
 
     [HttpPost("login")]
     [AllowAnonymous]
     [ProducesResponseType(typeof(ApiResponse<AuthResultDto>), StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<ActionResult<ApiResponse<AuthResultDto>>> Login(
         [FromBody] LoginRequest request,
         CancellationToken cancellationToken)
     {
         await _loginValidator.ValidateAndThrowAsync(request, cancellationToken);
-        var result = await _identityService.LoginAsync(request, GetIpAddress(), cancellationToken);
+        var result = await _authService.LoginAsync(request, GetIpAddress(), cancellationToken);
         return Ok(ApiResponse<AuthResultDto>.Ok(result, "Login successful."));
     }
 
     [HttpPost("refresh")]
     [AllowAnonymous]
     [ProducesResponseType(typeof(ApiResponse<AuthResultDto>), StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<ActionResult<ApiResponse<AuthResultDto>>> Refresh(
         [FromBody] RefreshTokenRequest request,
         CancellationToken cancellationToken)
@@ -67,7 +64,7 @@ public class AuthController : ControllerBase
             return BadRequest(ApiResponse<AuthResultDto>.Fail("Refresh token is required."));
         }
 
-        var result = await _identityService.RefreshTokenAsync(request.RefreshToken, GetIpAddress(), cancellationToken);
+        var result = await _authService.RefreshTokenAsync(request.RefreshToken, GetIpAddress(), cancellationToken);
         return Ok(ApiResponse<AuthResultDto>.Ok(result, "Token refreshed."));
     }
 
@@ -80,7 +77,7 @@ public class AuthController : ControllerBase
     {
         if (!string.IsNullOrWhiteSpace(request.RefreshToken))
         {
-            await _identityService.RevokeRefreshTokenAsync(request.RefreshToken, GetIpAddress(), cancellationToken);
+            await _authService.RevokeRefreshTokenAsync(request.RefreshToken, GetIpAddress(), cancellationToken);
         }
 
         return Ok(ApiResponse<object>.Ok(new { }, "Logged out."));
@@ -89,7 +86,6 @@ public class AuthController : ControllerBase
     [HttpGet("me")]
     [Authorize]
     [ProducesResponseType(typeof(ApiResponse<UserProfileDto>), StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<ActionResult<ApiResponse<UserProfileDto>>> Me(CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(_currentUser.UserId))
@@ -97,7 +93,7 @@ public class AuthController : ControllerBase
             return Unauthorized(ApiResponse<UserProfileDto>.Fail("Not authenticated."));
         }
 
-        var profile = await _identityService.GetUserProfileAsync(_currentUser.UserId, cancellationToken);
+        var profile = await _authService.GetUserProfileAsync(_currentUser.UserId, cancellationToken);
         if (profile is null)
         {
             return NotFound(ApiResponse<UserProfileDto>.Fail("User not found."));

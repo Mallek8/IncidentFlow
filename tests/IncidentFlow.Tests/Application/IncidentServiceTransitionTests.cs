@@ -1,7 +1,9 @@
 using FluentAssertions;
 using IncidentFlow.Application.Common.Exceptions;
 using IncidentFlow.Application.Common.Interfaces;
+using IncidentFlow.Application.Features.Incidents.Mapping;
 using IncidentFlow.Application.Features.Incidents.Models;
+using IncidentFlow.Application.Features.Incidents.Security;
 using IncidentFlow.Application.Features.Incidents.Services;
 using IncidentFlow.Domain.Constants;
 using IncidentFlow.Domain.Entities;
@@ -46,13 +48,38 @@ public class IncidentServiceTransitionTests
         var clock = new Mock<IDateTimeProvider>();
         clock.SetupGet(x => x.UtcNow).Returns(DateTime.UtcNow);
 
-        var service = new IncidentService(db, currentUser.Object, clock.Object);
+        var accessPolicy = new IncidentAccessPolicy(currentUser.Object);
+        var mapper = new IncidentMapper();
+        var tickets = new Mock<ITicketNumberGenerator>();
+
+        var service = new IncidentService(
+            db,
+            currentUser.Object,
+            clock.Object,
+            accessPolicy,
+            mapper,
+            tickets.Object);
 
         var act = async () => await service.UpdateStatusAsync(
             incident.Id,
             new UpdateIncidentStatusRequest(IncidentStatus.Resolved, "done"));
 
         await act.Should().ThrowAsync<BusinessRuleException>();
+    }
+
+    [Fact]
+    public void IncidentAccessPolicy_EmployeeCannotViewOthersIncidents()
+    {
+        var currentUser = new Mock<ICurrentUserService>();
+        currentUser.SetupGet(x => x.IsAuthenticated).Returns(true);
+        currentUser.SetupGet(x => x.UserId).Returns("employee-1");
+        currentUser.Setup(x => x.IsInRole(It.IsAny<string>())).Returns(false);
+
+        var policy = new IncidentAccessPolicy(currentUser.Object);
+        var incident = new Incident { CreatedByUserId = "other-user", Status = IncidentStatus.New };
+
+        var act = () => policy.EnsureCanView(incident);
+        act.Should().Throw<ForbiddenAccessException>();
     }
 
     private static ApplicationDbContext CreateDb()

@@ -112,7 +112,8 @@ public static class DependencyInjection
         services.AddAuthorization();
         services.AddHttpContextAccessor();
         services.AddScoped<ICurrentUserService, CurrentUserService>();
-        services.AddScoped<IIdentityService, IdentityService>();
+        services.AddScoped<IAuthService, AuthService>();
+        services.AddScoped<IUserAdminService, UserAdminService>();
         services.AddScoped<ITokenService, TokenService>();
         services.AddSingleton<IDateTimeProvider, DateTimeProvider>();
 

@@ -1,0 +1,44 @@
+## .NET
+bin/
+obj/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+.vs/
+*.DotSettings.user
+project.lock.json
+project.fragment.lock.json
+artifacts/
+
+## Secrets / local config
+appsettings.*.local.json
+*.pfx
+.env
+.env.*
+!.env.example
+
+## Node / frontend
+node_modules/
+dist/
+dist-ssr/
+*.local
+.npm/
+coverage/
+
+## IDE / OS
+.idea/
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+.DS_Store
+Thumbs.db
+
+## Test / coverage
+TestResults/
+coverage*/
+*.coverage
+*.coveragexml
+
+## Docker
+docker-data/

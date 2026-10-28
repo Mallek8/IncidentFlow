@@ -8,54 +8,54 @@ Employees can report technical issues, technicians manage assigned incidents, an
 
 - [https://github.com/Mallek8/IncidentFlow](https://github.com/Mallek8/IncidentFlow)
 
+## Languages & technologies
+
+| Area | Languages / tools |
+| --- | --- |
+| Backend | **C#**, ASP.NET Core Web API (.NET 9), EF Core, SQL Server, Identity, JWT |
+| Frontend | **TypeScript**, **JavaScript**, **CSS**/Tailwind, React, Vite |
+| Infra / DevOps | **Dockerfile**, **YAML** (Docker Compose, GitHub Actions), **Nginx** config |
+| Data | SQL Server (T-SQL via EF Core migrations) |
+
+GitHub’s language bar reflects tracked source files (mainly C#, TypeScript, CSS, and YAML once indexed).
+
 ## Technology stack
 
 | Layer | Technologies |
 | --- | --- |
 | Backend | C#, ASP.NET Core Web API (.NET 9), EF Core, SQL Server, ASP.NET Core Identity, JWT + refresh tokens, FluentValidation, Swagger |
 | Architecture | Clean Architecture (Domain, Application, Infrastructure, API, Tests) |
-| Frontend | React, TypeScript, Vite, Tailwind CSS, TanStack Query, Recharts *(Phase 4+)* |
+| Frontend | React, TypeScript, Vite, Tailwind CSS, React Router, TanStack Query, Axios, Recharts, Lucide |
 | Quality | xUnit, FluentAssertions, Moq |
-| DevOps | Docker / Compose, GitHub Actions *(Phase 6)* |
+| DevOps | Docker, Docker Compose, GitHub Actions CI |
 
 ## Solution structure
 
 ```
 IncidentFlow.sln
 ├── src/
-│   ├── IncidentFlow.Domain/           # Entities, enums, domain rules (no infra deps)
-│   ├── IncidentFlow.Application/      # Use cases, DTOs, validation, interfaces
-│   ├── IncidentFlow.Infrastructure/   # EF Core, Identity, JWT, seeding
-│   └── IncidentFlow.API/              # HTTP endpoints, middleware, Swagger
-├── tests/
-│   └── IncidentFlow.Tests/            # Unit + integration tests
-└── frontend/                          # React app (Phase 4)
+│   ├── IncidentFlow.Domain/
+│   ├── IncidentFlow.Application/
+│   ├── IncidentFlow.Infrastructure/
+│   └── IncidentFlow.API/
+├── tests/IncidentFlow.Tests/
+├── frontend/                 # React + TypeScript UI
+├── docker-compose.yml
+└── .github/workflows/ci.yml
 ```
 
-### Dependency rule
+## Features
 
-`API → Application ← Infrastructure`  
-`Application → Domain`  
-`Infrastructure → Domain`  
-Domain has **no** outward project dependencies.
+- Role-based access: Employee, Technician, Admin (enforced on the API)
+- Incident lifecycle with validated status transitions
+- Comments (public + internal staff notes)
+- Assignment workflow (Admin)
+- SLA deadlines by priority and overdue monitoring
+- Dashboard metrics with Recharts
+- JWT authentication + refresh tokens
+- EF Core migrations and development seed data
 
-## Features implemented so far
-
-### Phase 1
-- Clean Architecture solution scaffolding
-- Domain entities, status transitions, SLA calculator
-- Shared API response models and exception middleware
-- Health endpoint + Swagger foundation
-
-### Phase 2
-- EF Core entity configurations, indexes, relationships
-- Initial SQL Server migration (`InitialCreate`)
-- ASP.NET Core Identity with roles: Admin, Technician, Employee
-- JWT access tokens + rotatable refresh tokens
-- Auth endpoints: register, login, refresh, logout, me
-- Development seed data (users, categories, SLA policies, sample incident)
-
-## Auth API (Phase 2)
+## Auth API
 
 | Method | Endpoint | Access |
 | --- | --- | --- |
@@ -64,7 +64,21 @@ Domain has **no** outward project dependencies.
 | POST | `/api/auth/refresh` | Anonymous |
 | POST | `/api/auth/logout` | Authenticated |
 | GET | `/api/auth/me` | Authenticated |
-| GET | `/api/health` | Anonymous |
+
+## Incident API
+
+| Method | Endpoint | Access |
+| --- | --- | --- |
+| GET | `/api/incidents` | Authenticated (scoped by role) |
+| GET | `/api/incidents/{id}` | Authenticated (scoped by role) |
+| POST | `/api/incidents` | Authenticated |
+| PATCH | `/api/incidents/{id}/status` | Technician / Admin |
+| POST | `/api/incidents/{id}/assign` | Admin |
+| POST | `/api/incidents/{id}/comments` | Authenticated |
+| POST | `/api/incidents/{id}/reopen` | Reporter / Admin |
+| GET | `/api/categories` | Authenticated |
+| POST | `/api/categories` | Admin |
+| GET | `/api/dashboard/summary` | Authenticated |
 
 ### Seeded development accounts
 
@@ -79,78 +93,60 @@ Development seed accounts use fictional data only.
 
 ## Prerequisites
 
-- [.NET 9 SDK](https://dotnet.microsoft.com/download/dotnet/9.0)
-- SQL Server (local instance, Docker container, or Azure SQL)
-- Node.js 20+ *(frontend phases)*
-- Docker Desktop *(optional, Phase 6)*
+- .NET 9 SDK
+- Node.js 20+
+- SQL Server (local, Docker, or Azure SQL)
+- Docker Desktop (optional)
 - Git
 
-## Run the API locally
+## Run locally
+
+### Backend
 
 ```powershell
 cd <repo-root>
-
-# Optional: configure secrets
-cd src/IncidentFlow.API
-dotnet user-secrets init
-dotnet user-secrets set "ConnectionStrings:DefaultConnection" "Server=localhost,1433;Database=IncidentFlowDb;User Id=sa;Password=YOUR_PASSWORD;TrustServerCertificate=True;MultipleActiveResultSets=true"
-dotnet user-secrets set "Jwt:Key" "YOUR_LONG_RANDOM_SECRET_AT_LEAST_32_CHARS"
-cd ../..
-
 dotnet restore
 dotnet build
 dotnet test
 dotnet run --project src/IncidentFlow.API --launch-profile https
 ```
 
-On Development startup the API attempts `Migrate()` + seed automatically.
-
-- HTTP: `http://localhost:5073`
-- HTTPS: `https://localhost:7269`
 - Swagger: `https://localhost:7269/swagger`
+- HTTP API: `http://localhost:5073`
 
-Trust the HTTPS development certificate once:
+Configure SQL Server and JWT via user secrets or environment variables (see `.env.example`).
 
-```powershell
-dotnet dev-certs https --trust
-```
-
-### Database migrations
+### Frontend
 
 ```powershell
-dotnet ef database update --project src/IncidentFlow.Infrastructure --startup-project src/IncidentFlow.API
+cd frontend
+npm install
+npm run dev
 ```
 
-Create a new migration later:
+- UI: `http://localhost:5173`
+- Set `VITE_API_BASE_URL=http://localhost:5073` if needed
+
+### Docker Compose
 
 ```powershell
-dotnet ef migrations add <Name> --project src/IncidentFlow.Infrastructure --startup-project src/IncidentFlow.API --output-dir Persistence/Migrations
+docker compose up --build
 ```
 
-## Configuration
-
-Sensitive values must come from environment variables or user secrets — do not commit real secrets.
-
-| Setting | Purpose |
-| --- | --- |
-| `ConnectionStrings__DefaultConnection` | SQL Server connection |
-| `Jwt__Key` | JWT signing key (≥ 32 chars) |
-| `Cors__AllowedOrigins__0` | Frontend origin |
-
-See `.env.example` for a template.
+- API: `http://localhost:8080`
+- Web: `http://localhost:8081`
+- SQL Server: `localhost:1433`
 
 ## SLA calculation rules
 
-Default resolution windows (calendar hours, 24/7 — not business-hours):
-
-| Priority | Hours |
+| Priority | Hours (calendar, 24/7) |
 | --- | --- |
 | Critical | 4 |
 | High | 8 |
 | Medium | 24 |
 | Low | 72 |
 
-`SlaDeadlineUtc = CreatedAtUtc + ResolutionTimeHours`. Overdue when `now` (or resolution time) is after the deadline. Business-hours calendars are a planned enhancement.
+`SlaDeadlineUtc = CreatedAtUtc + ResolutionTimeHours`.
 
 ## Status transition rules
 
@@ -167,30 +163,20 @@ Default resolution windows (calendar hours, 24/7 — not business-hours):
 
 ```powershell
 dotnet test
+cd frontend
+npm run build
 ```
-
-Current coverage includes domain status transitions, SLA helpers, and auth request validation.
 
 ## Screenshots
 
-_Add UI screenshots after Phase 4–5._
+_Add UI screenshots as needed._
 
 ## Roadmap
 
-1. **Phase 1** — Solution + architecture foundation *(done)*
-2. **Phase 2** — EF configurations, migrations, seed data, Identity + JWT *(done / pending live SQL Server verification)*
-3. **Phase 3** — Incident management REST APIs and authorization
-4. **Phase 4** — React frontend wired to the real API
-5. **Phase 5** — Dashboards, role workflows, SLA monitoring
-6. **Phase 6** — Broader tests, Docker Compose, GitHub Actions CI, docs polish
-
-## Future improvements
-
-- Business-hours SLA calendars and pause-on-waiting states
-- Email / Teams notifications
-- Attachment storage
-- Audit export and advanced reporting
-- Soft-delete and archival policies
+- Broader admin user-management APIs
+- Business-hours SLA calendars
+- Attachments and notifications
+- Expanded integration tests
 
 ## License
 

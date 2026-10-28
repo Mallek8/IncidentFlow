@@ -10,44 +10,44 @@ Employees can report technical issues, technicians manage assigned incidents, an
 
 - [https://github.com/Mallek8/IncidentFlow](https://github.com/Mallek8/IncidentFlow)
 
-## Architecture & SOLID
+## Architecture and SOLID
 
 The backend follows **Clean Architecture** and is intentionally shaped around **SOLID**, especially **Single Responsibility**.
 
 ```
-API  →  Application  ←  Infrastructure
-           ↓
-         Domain
+API -> Application <- Infrastructure
+            |
+          Domain
 ```
 
 | Principle | How IncidentFlow applies it |
 | --- | --- |
-| **S — Single Responsibility** | One reason to change per type: `IncidentService` handles incident lifecycle only; `CategoryService` and `DashboardService` are separate; `IncidentAccessPolicy` owns authorization rules; `IncidentMapper` owns DTO mapping; `TicketNumberGenerator` owns ticket numbers; `AuthService` vs `UserAdminService` split authentication from user administration. Controllers stay thin HTTP adapters. |
-| **O — Open/Closed** | Status transitions and SLA rules live in Domain (`IncidentStatusTransitionRules`, `SlaCalculator`). New priorities/transitions extend those rules without rewriting controllers. |
-| **L — Liskov Substitution** | Services are consumed through interfaces (`IIncidentService`, `IAuthService`, …). Implementations can be replaced in tests (Moq / in-memory EF) without changing callers. |
-| **I — Interface Segregation** | Clients depend on narrow contracts: incidents, categories, dashboard, auth, and user-admin are separate interfaces instead of one large “god” service. |
-| **D — Dependency Inversion** | Application defines abstractions (`IApplicationDbContext`, `ICurrentUserService`, `IAuthService`, …). Infrastructure implements them. API and Application never depend on concrete EF/Identity details. |
+| **S: Single Responsibility** | One reason to change per type: `IncidentService` handles incident lifecycle only; `CategoryService` and `DashboardService` are separate; `IncidentAccessPolicy` owns authorization rules; `IncidentMapper` owns DTO mapping; `TicketNumberGenerator` owns ticket numbers; `AuthService` vs `UserAdminService` split authentication from user administration. Controllers stay thin HTTP adapters. |
+| **O: Open/Closed** | Status transitions and SLA rules live in Domain (`IncidentStatusTransitionRules`, `SlaCalculator`). New priorities/transitions extend those rules without rewriting controllers. |
+| **L: Liskov Substitution** | Services are consumed through interfaces (`IIncidentService`, `IAuthService`, ...). Implementations can be replaced in tests (Moq / in-memory EF) without changing callers. |
+| **I: Interface Segregation** | Clients depend on narrow contracts: incidents, categories, dashboard, auth, and user-admin are separate interfaces instead of one large "god" service. |
+| **D: Dependency Inversion** | Application defines abstractions (`IApplicationDbContext`, `ICurrentUserService`, `IAuthService`, ...). Infrastructure implements them. API and Application never depend on concrete EF/Identity details. |
 
 ### Application feature layout
 
 ```
 Application/
-├── Common/Interfaces/          # Abstractions (DIP)
-├── Features/
-│   ├── Incidents/
-│   │   ├── Services/           # Incident lifecycle
-│   │   ├── Security/           # Access policy (SRP)
-│   │   ├── Mapping/            # DTO mapping (SRP)
-│   │   ├── Models/
-│   │   └── Validators/
-│   ├── Categories/             # Category use-cases
-│   ├── Dashboard/              # Analytics use-cases
-│   └── Auth/                   # Auth DTOs + validators
+  Common/Interfaces/          # Abstractions (DIP)
+  Features/
+    Incidents/
+      Services/               # Incident lifecycle
+      Security/               # Access policy (SRP)
+      Mapping/                # DTO mapping (SRP)
+      Models/
+      Validators/
+    Categories/               # Category use-cases
+    Dashboard/                # Analytics use-cases
+    Auth/                     # Auth DTOs + validators
 ```
 
 Domain keeps pure business rules (no EF, no HTTP). Infrastructure hosts EF Core, Identity, JWT, and seeding.
 
-## Languages & technologies
+## Languages and technologies
 
 | Area | Languages / tools |
 | --- | --- |
@@ -69,16 +69,16 @@ Domain keeps pure business rules (no EF, no HTTP). Infrastructure hosts EF Core,
 
 ```
 IncidentFlow.sln
-├── src/
-│   ├── IncidentFlow.Domain/
-│   ├── IncidentFlow.Application/
-│   ├── IncidentFlow.Infrastructure/
-│   └── IncidentFlow.API/
-├── tests/IncidentFlow.Tests/
-├── frontend/
-├── scripts/
-├── docker-compose.yml
-└── .github/workflows/ci.yml
+  src/
+    IncidentFlow.Domain/
+    IncidentFlow.Application/
+    IncidentFlow.Infrastructure/
+    IncidentFlow.API/
+  tests/IncidentFlow.Tests/
+  frontend/
+  scripts/
+  docker-compose.yml
+  .github/workflows/ci.yml
 ```
 
 ## Features
@@ -170,7 +170,7 @@ npm run dev
 ```
 
 - UI: `http://localhost:5188`
-- Dev proxy: `/api` → `http://localhost:5088`
+- Dev proxy: `/api` -> `http://localhost:5088`
 
 ### Docker Compose
 
